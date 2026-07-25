@@ -200,6 +200,29 @@ from GitHub explicitly:
 uvx --from "git+https://github.com/chigwell/telegram-mcp.git@<pinned-release-tag-or-commit>" telegram-mcp-generate-session
 ```
 
+### Keeping credentials in `.env` instead of the client config
+
+`runtime.py` calls `load_dotenv()` without a path, so `.env` is only found when
+the process starts inside this checkout — but an MCP client launches the server
+from whatever directory it happens to be in, which is why the configurations
+above pass the credentials through `env` instead. To keep the session string
+out of the client's config file, launch `serve_stdio.py`: it chdirs into the
+checkout and then hands over to `main.py` unchanged.
+
+```json
+{
+  "mcpServers": {
+    "telegram-mcp": {
+      "command": "/full/path/to/telegram-mcp/.venv/bin/python",
+      "args": ["/full/path/to/telegram-mcp/serve_stdio.py"]
+    }
+  }
+}
+```
+
+On Windows the interpreter is `<checkout>\.venv\Scripts\python.exe`; no uv
+required.
+
 ### Transports
 
 The server speaks three MCP transports, selected with `MCP_TRANSPORT`:
