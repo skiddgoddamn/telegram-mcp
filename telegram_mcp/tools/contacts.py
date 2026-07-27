@@ -500,7 +500,9 @@ async def import_contacts(contacts: list, account: Optional[str] = None) -> str:
         cl = get_client(account)
         await ensure_connected(cl)
         input_contacts = [
-            functions.contacts.InputPhoneContact(
+            # InputPhoneContact — это тип, а не метод API: в functions.contacts его нет,
+            # и обращение туда роняло импорт целиком с AttributeError.
+            types.InputPhoneContact(
                 client_id=i,
                 phone=c["phone"],
                 first_name=c["first_name"],
@@ -509,7 +511,24 @@ async def import_contacts(contacts: list, account: Optional[str] = None) -> str:
             for i, c in enumerate(contacts)
         ]
         result = await cl(functions.contacts.ImportContactsRequest(contacts=input_contacts))
-        return f"Imported {len(result.imported)} contacts."
+        # Номер без аккаунта Telegram просто отсутствует в ответе — это и есть проверка
+        # «есть ли контакт». Без разбивки по номерам счётчик импортированных на неё
+        # не отвечает, а звонить вслепую по несуществующему id нельзя.
+        by_client_id = {u.id: u for u in result.users}
+        found = []
+        for imp in result.imported:
+            user = by_client_id.get(imp.user_id)
+            found.append({
+                "phone": contacts[imp.client_id]["phone"],
+                "user_id": imp.user_id,
+                "username": getattr(user, "username", None) if user else None,
+                "name": getattr(user, "first_name", None) if user else None,
+            })
+        found_phones = {f["phone"] for f in found}
+        return json.dumps({
+            "found": found,
+            "not_on_telegram": [c["phone"] for c in contacts if c["phone"] not in found_phones],
+        }, ensure_ascii=False, default=str)
     except Exception as e:
         return log_and_format_error("import_contacts", e, contacts=contacts)
 
